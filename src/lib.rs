@@ -1,11 +1,11 @@
 use std::{cell::UnsafeCell, fmt::Debug};
 
-pub struct AppendVec<T>(UnsafeCell<Vec<Box<T>>>);
+pub struct AppendVec<T: ?Sized>(UnsafeCell<Vec<Box<T>>>);
 
-impl<T> AppendVec<T> {
-    pub fn push(&self, t: T) {
+impl<T: ?Sized> AppendVec<T> {
+    pub fn push(&self, t: Box<T>) {
         unsafe {
-            (*self.0.get()).push(Box::new(t));
+            (*self.0.get()).push(t);
         }
     }
 
@@ -30,8 +30,8 @@ impl<T> AppendVec<T> {
         self.0.get_mut()
     }
 
-    pub fn pop(&mut self) -> Option<T> {
-        self.0.get_mut().pop().map(|v| *v)
+    pub fn pop(&mut self) -> Option<Box<T>> {
+        self.0.get_mut().pop()
     }
 
     pub fn new() -> Self {
@@ -39,7 +39,23 @@ impl<T> AppendVec<T> {
     }
 }
 
-impl<T> Drop for AppendVec<T> {
+impl<T> Clone for AppendVec<T>
+where
+    Box<T>: Clone,
+{
+    fn clone(&self) -> Self {
+        let vec = AppendVec::new();
+        // Safe: this data structure is single-threader, meaning no other code will
+        // mutate the inner vec while we iterate it.
+        let inner = unsafe { &*self.0.get() };
+        for elem in inner.iter() {
+            vec.push(elem.clone());
+        }
+        vec
+    }
+}
+
+impl<T: ?Sized> Drop for AppendVec<T> {
     fn drop(&mut self) {
         while let Some(_) = self.pop() {}
     }
